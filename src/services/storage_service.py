@@ -1,17 +1,14 @@
 from uuid import uuid4
-
-from services.pdf_service import extract_text_from_pdf
+from services.pdf_service import extract_text_from_pdf, convert_binary_to_text
 
 SESSIONS = {}
 
-def create_session(job_description: str, cv_path: str):
+def create_session(job_description: str, cv_data: str):
     session_id = str(uuid4())
-
     SESSIONS[session_id] = {
         "session_id": session_id,
         "job_description": job_description,
-        "cv_path": cv_path,
-        "cv_description": extract_text_from_pdf(cv_path),
+        "cv_description": convert_binary_to_text(cv_data),
         "analysis": None,
         "answers": [],
         "final_report": None

@@ -1,7 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import tempfile
 import json
-import os
 
 from services.storage_service import (
     create_session,
@@ -55,7 +53,7 @@ async def interview_ws(websocket: WebSocket):
                 if event_type == "create_session":
                     session = create_session(
                         data.get("job_description"),
-                        data.get("cv_path")
+                        data.get("cv_data")
                     )
 
                     current_session_id = session["session_id"]
