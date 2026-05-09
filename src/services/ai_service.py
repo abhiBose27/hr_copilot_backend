@@ -1,0 +1,211 @@
+import json
+
+from services.llm_client import client, TEXT_MODEL
+
+
+async def ask_llm_json(system_prompt: str, user_prompt: str) -> dict:
+    """
+    Generic OpenRouter JSON response helper
+    """
+
+    response = client.chat.completions.create(
+        model=TEXT_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ],
+        temperature=0.2,
+        response_format={"type": "json_object"}
+    )
+
+    content = response.choices[0].message.content
+
+    try:
+        return json.loads(content)
+
+    except Exception:
+        return {
+            "error": True,
+            "message": "Failed to parse LLM JSON response",
+            "raw_response": content
+        }
+
+
+# =========================================================
+# JD + CV ANALYSIS
+# =========================================================
+
+async def analyze_jd_cv(jd: str, cv: str):
+
+    system_prompt = """
+You are an expert technical recruiter assistant.
+
+Your role is to help HR recruiters conduct structured and fair technical screening interviews.
+
+You DO NOT make hiring decisions.
+
+Return ONLY valid JSON.
+"""
+
+    user_prompt = f"""
+Job Description:
+{jd}
+
+Candidate CV:
+{cv}
+
+Tasks:
+1. Identify required skills from the JD
+2. Identify matching skills in the CV
+3. Identify missing skills
+4. Generate skill match summary
+5. Generate interview plan
+6. Generate CV-based cross questions
+7. Identify risk areas
+
+Return JSON in this structure:
+
+{{
+  "overall_match_score": 0,
+  "summary": "",
+  "matched_skills": [],
+  "missing_skills": [],
+  "partially_matched_skills": [],
+  "risk_areas": [],
+  "recommended_focus": [],
+  "cv_based_cross_questions": [],
+  "interview_plan": []
+}}
+"""
+
+    return await ask_llm_json(system_prompt, user_prompt)
+
+
+# =========================================================
+# ANSWER ANALYSIS
+# =========================================================
+
+async def analyze_answer(
+    jd: str,
+    cv: str,
+    question: str,
+    topic: str,
+    candidate_answer: str,
+    interview_plan=None
+):
+
+    system_prompt = """
+You are a real-time HR Interview Copilot.
+
+You help non-technical recruiters understand whether candidate answers are:
+- strong
+- weak
+- generic
+- vague
+- technically correct
+- suspicious
+
+You DO NOT make hiring decisions.
+
+Return ONLY valid JSON.
+"""
+
+    user_prompt = f"""
+Job Description:
+{jd}
+
+Candidate CV:
+{cv}
+
+Interview Plan:
+{interview_plan}
+
+Current Question:
+{question}
+
+Current Topic:
+{topic}
+
+Candidate Answer:
+{candidate_answer}
+
+Analyze the answer.
+
+Return JSON in this structure:
+
+{{
+  "quality_rating": "",
+  "score": 0,
+  "summary": "",
+  "what_was_correct": [],
+  "what_was_missing": [],
+  "expected_answer_should_include": [],
+  "suggested_follow_up_question": "",
+  "red_flag": {{
+      "is_red_flag": false,
+      "reason": ""
+  }},
+  "hr_guidance": ""
+}}
+"""
+
+    return await ask_llm_json(system_prompt, user_prompt)
+
+
+# =========================================================
+# FINAL REPORT
+# =========================================================
+
+async def generate_final_report(
+    jd: str,
+    cv: str,
+    initial_analysis: dict,
+    answers: list
+):
+
+    system_prompt = """
+You are an HR interview report assistant.
+
+You summarize interview evidence fairly and professionally.
+
+You DO NOT make final hiring decisions.
+
+Return ONLY valid JSON.
+"""
+
+    user_prompt = f"""
+Job Description:
+{jd}
+
+Candidate CV:
+{cv}
+
+Initial Analysis:
+{json.dumps(initial_analysis, indent=2)}
+
+Interview Answers:
+{json.dumps(answers, indent=2)}
+
+Generate a final structured interview report.
+
+Return JSON in this structure:
+
+{{
+  "candidate_summary": "",
+  "overall_interview_signal": "",
+  "skill_evaluation": [],
+  "strengths": [],
+  "weaknesses": [],
+  "red_flags": [],
+  "recommended_next_step": "",
+  "human_decision_note": ""
+}}
+"""
+
+    return await ask_llm_json(system_prompt, user_prompt)
