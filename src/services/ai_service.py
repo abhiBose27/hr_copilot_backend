@@ -65,9 +65,10 @@ Tasks:
 2. Identify matching skills in the CV
 3. Identify missing skills
 4. Generate skill match summary
-5. Generate interview plan
-6. Generate CV-based cross questions
-7. Identify risk areas
+5. Generate CV-based cross questions
+6. Identify risk areas
+
+Make sure every score is out of 100.
 
 Return JSON in this structure:
 
@@ -80,12 +81,53 @@ Return JSON in this structure:
   "risk_areas": [],
   "recommended_focus": [],
   "cv_based_cross_questions": [],
-  "interview_plan": []
 }}
 """
 
     return await ask_llm_json(system_prompt, user_prompt)
 
+# =========================================================
+# GET TOPIC SPECIFIC QUESTIONS
+# =========================================================
+
+async def get_topic_specific_questions(
+    jd: str,
+    cv: str,
+    topic: str,
+    answers: list
+):
+    system_prompt = """
+You are a real-time HR Interview Copilot.
+
+You DO NOT make hiring decisions.
+
+Return ONLY valid JSON.
+"""
+
+
+    user_prompt = f"""
+Job Description:
+{jd}
+
+Candidate CV:
+{cv}
+
+Previous questions and answers:
+{answers}
+
+Topic:
+{topic}
+
+Suggest 3 different questions based on the given topic that hasnt been covered. 
+
+Return JSON in this structure:
+
+{{
+  "suggested_questions: []
+}}
+"""
+
+    return await ask_llm_json(system_prompt, user_prompt)
 
 # =========================================================
 # ANSWER ANALYSIS
@@ -95,9 +137,7 @@ async def analyze_answer(
     jd: str,
     cv: str,
     question: str,
-    topic: str,
     candidate_answer: str,
-    interview_plan=None
 ):
 
     system_prompt = """
@@ -123,19 +163,13 @@ Job Description:
 Candidate CV:
 {cv}
 
-Interview Plan:
-{interview_plan}
-
 Current Question:
 {question}
-
-Current Topic:
-{topic}
 
 Candidate Answer:
 {candidate_answer}
 
-Analyze the answer.
+Analyze the answer. Mark the score out of 100
 
 Return JSON in this structure:
 
@@ -147,6 +181,7 @@ Return JSON in this structure:
   "what_was_missing": [],
   "expected_answer_should_include": [],
   "suggested_follow_up_question": "",
+  "other_suggested_topics_to_cover_in_one_word": [],
   "red_flag": {{
       "is_red_flag": false,
       "reason": ""

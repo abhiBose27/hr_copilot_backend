@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+from services.pdf_service import extract_text_from_pdf
+
 SESSIONS = {}
 
 def create_session(job_description: str, cv_path: str):
@@ -9,6 +11,7 @@ def create_session(job_description: str, cv_path: str):
         "session_id": session_id,
         "job_description": job_description,
         "cv_path": cv_path,
+        "cv_description": extract_text_from_pdf(cv_path),
         "analysis": None,
         "answers": [],
         "final_report": None
@@ -27,14 +30,12 @@ def save_initial_analysis(session_id: str, analysis: dict):
 def save_answer(
     session_id: str,
     question: str,
-    topic: str,
     candidate_answer: str,
     transcript: str,
     analysis: dict
 ):
     SESSIONS[session_id]["answers"].append({
         "question": question,
-        "topic": topic,
         "candidate_answer": candidate_answer,
         "transcript": transcript,
         "analysis": analysis

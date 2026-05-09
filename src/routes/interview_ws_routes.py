@@ -14,10 +14,11 @@ from services.storage_service import (
 from services.ai_service import (
     analyze_jd_cv,
     analyze_answer,
-    generate_final_report
+    generate_final_report,
+    get_topic_specific_questions
 )
 
-from services.pdf_service import extract_text_from_pdf
+#from services.pdf_service import extract_text_from_pdf
 
 #from services.speech_service import transcribe_audio_path
 
@@ -60,7 +61,7 @@ async def interview_ws(websocket: WebSocket):
                     current_session_id = session["session_id"]
 
                     await websocket.send_json({
-                        "type": "session_created",
+                        "type": "create_session",
                         "session_id": current_session_id
                     })
 
@@ -71,27 +72,64 @@ async def interview_ws(websocket: WebSocket):
                 elif event_type == "analyze_jd_cv":
                     session_id = data.get("session_id")
                     session = get_session(session_id)
-                    cv_path = session["cv_path"]
-                    extracted_text = extract_text_from_pdf(cv_path)
+
                     analysis = await analyze_jd_cv(
                         session["job_description"],
-                        extracted_text
+                        session["cv_description"]
                     )
 
                     save_initial_analysis(session_id, analysis)
 
                     await websocket.send_json({
-                        "type": "jd_cv_analysis",
-                        "analysis": analysis
+                        "type": "analyze_jd_cv",
+                        "cv_based_cross_questions": analysis["cv_based_cross_questions"],
+                        "match_score": analysis["overall_match_score"]
                     })
 
                 # =================================================
-                # START AUDIO
+                # Topic Questions
                 # =================================================
+                elif event_type == "topic_questions":
+                    session_id = data.get("session_id")
+                    topic = data.get("topic")
+
+                    session = get_session(session_id)
+
+                    if not session:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Session not found"
+                        })
+                        continue
+
+                    if not transcript:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Transcript is required"
+                        })
+                        continue
+
+                    await websocket.send_json({
+                        "type": "status",
+                        "message": "Analyzing transcript with OpenRouter..."
+                    })
+
+                    questions = await get_topic_specific_questions(
+                        jd=session["job_description"],
+                        cv=session["cv_description"],
+                        topic=topic,
+                        answers=session["answers"]
+                    )
+
+                    await websocket.send_json({
+                        "type": "topic_questions",
+                        "suggested_questions": questions["suggested_questions"]
+                    })
+
+
                 elif event_type == "analyze_transcript":
                     session_id = data.get("session_id")
                     question = data.get("question", "")
-                    topic = data.get("topic", "")
                     transcript = data.get("transcript", "")
 
                     session = get_session(session_id)
@@ -117,26 +155,26 @@ async def interview_ws(websocket: WebSocket):
 
                     analysis = await analyze_answer(
                         jd=session["job_description"],
-                        cv=session["candidate_cv"],
+                        cv=session["cv_description"],
                         question=question,
-                        topic=topic,
                         candidate_answer=transcript,
-                        interview_plan=session.get("analysis", {}).get("interview_plan", [])
                     )
 
                     save_answer(
                         session_id=session_id,
                         question=question,
-                        topic=topic,
                         candidate_answer=transcript,
                         transcript=transcript,
                         analysis=analysis
                     )
 
                     await websocket.send_json({
-                        "type": "answer_analysis",
+                        "type": "analyze_transcript",
                         "transcript": transcript,
-                        "analysis": analysis
+                        "score": analysis["score"],
+                        "quality_rating": analysis["quality_rating"],
+                        "suggested_follow_up_question": analysis["suggested_follow_up_question"],
+                        "other_suggested_topics_to_cover": analysis["other_suggested_topics_to_cover_in_one_word"]
                     })
                 
                 elif event_type == "generate_report":
@@ -144,7 +182,7 @@ async def interview_ws(websocket: WebSocket):
                     session = get_session(session_id)
                     report = await generate_final_report(
                         jd=session["job_description"],
-                        cv=session["candidate_cv"],
+                        cv=session["cv_description"],
                         initial_analysis=session.get("analysis"),
                         answers=session.get("answers", [])
                     )
@@ -152,109 +190,9 @@ async def interview_ws(websocket: WebSocket):
                     save_final_report(session_id, report)
 
                     await websocket.send_json({
-                        "type": "final_report",
+                        "type": "generate_report",
                         "report": report
                     })
-
-                """  elif event_type == "start_audio":
-
-                    current_question = data.get("question", "")
-                    current_topic = data.get("topic", "")
-
-                    audio_bytes = bytearray()
-
-                    await websocket.send_json({
-                        "type": "status",
-                        "message": "Recording started"
-                    })
-
-                # =================================================
-                # STOP AUDIO
-                # =================================================
-
-                elif event_type == "stop_audio":
-
-                    if not current_session_id:
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": "No active session"
-                        })
-                        continue
-
-                    session = get_session(current_session_id)
-
-                    await websocket.send_json({
-                        "type": "status",
-                        "message": "Transcribing audio..."
-                    })
-
-                    temp_path = None
-
-                    try:
-
-                        with tempfile.NamedTemporaryFile(
-                            delete=False,
-                            suffix=".webm"
-                        ) as temp:
-
-                            temp.write(audio_bytes)
-                            temp_path = temp.name
-
-                        transcript = await transcribe_audio_path(temp_path)
-
-                        await websocket.send_json({
-                            "type": "transcript",
-                            "transcript": transcript
-                        })
-
-                        await websocket.send_json({
-                            "type": "status",
-                            "message": "Analyzing answer..."
-                        })
-
-                        analysis = await analyze_answer(
-                            jd=session["job_description"],
-                            cv=session["candidate_cv"],
-                            question=current_question,
-                            topic=current_topic,
-                            candidate_answer=transcript,
-                            interview_plan=session.get(
-                                "analysis",
-                                {}
-                            ).get("interview_plan", [])
-                        )
-
-                        save_answer(
-                            session_id=current_session_id,
-                            question=current_question,
-                            topic=current_topic,
-                            candidate_answer=transcript,
-                            transcript=transcript,
-                            analysis=analysis
-                        )
-
-                        await websocket.send_json({
-                            "type": "answer_analysis",
-                            "transcript": transcript,
-                            "analysis": analysis
-                        })
-
-                    finally:
-
-                        if temp_path and os.path.exists(temp_path):
-                            os.remove(temp_path) 
-                 elif message.get("bytes"):
-
-                audio_bytes.extend(message["bytes"])
-                """
-
-                # =================================================
-                # FINAL REPORT
-                # =================================================
-
-            # =====================================================
-            # AUDIO BYTES
-            # =====================================================
 
     except WebSocketDisconnect:
 
