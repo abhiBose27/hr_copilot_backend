@@ -24,6 +24,5 @@ def convert_binary_to_text(cv_data):
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
-    print(text)
     return text
 

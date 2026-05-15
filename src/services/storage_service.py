@@ -1,5 +1,5 @@
 from uuid import uuid4
-from services.pdf_service import extract_text_from_pdf, convert_binary_to_text
+from services.pdf_service import convert_binary_to_text
 
 SESSIONS = {}
 
